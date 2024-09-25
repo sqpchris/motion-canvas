@@ -94,6 +94,9 @@ export class Player {
   private endTime = Infinity;
   private requestId: number | null = null;
   private renderTime = 0;
+  private playFramesAdvanced = 0;
+  private playStartTime = 0;
+  private requestAnimationFrameTime = 0;
   private requestedSeek = -1;
   private requestedRecalculation = true;
   private size: Vector2;
@@ -239,6 +242,11 @@ export class Player {
         paused: !value,
       };
 
+      if (value) {
+        this.playStartTime = this.requestAnimationFrameTime;
+        this.playFramesAdvanced = 0;
+      }
+
       // hitting play after the animation has finished should reset the
       // playback, even if looping is disabled.
       if (
@@ -366,7 +374,7 @@ export class Player {
     return state;
   }
 
-  private async run() {
+  private async run(time: number) {
     const state = await this.prepare();
     const previousState = this.playback.state;
     this.playback.state = state.paused
@@ -418,10 +426,25 @@ export class Player {
     }
     // Simply move forward one frame
     else if (this.status.frame < this.endFrame) {
-      await this.playback.progress();
-
-      if (state.speed !== 1) {
-        this.syncAudio();
+      // await this.playback.progress();
+      const {fps} = this.playback;
+      const mspf = 1000 / fps;
+      const timeAdvanced = time - this.playStartTime;
+      const framesToAdvance =
+        Math.floor((this.playback.speed * timeAdvanced) / mspf) -
+        this.playFramesAdvanced;
+      console.log(
+        framesToAdvance,
+        (this.playback.speed * (time - this.renderTime)) / mspf,
+      );
+      if (framesToAdvance > 0) {
+        await this.playback.seek(this.status.frame + framesToAdvance);
+        // this.renderTimeDiff = this.renderTime + (framesToAdvance * mspf)
+        this.playFramesAdvanced += framesToAdvance;
+        this.renderTime = time;
+        if (state.speed !== 1) {
+          this.syncAudio();
+        }
       }
     }
 
@@ -442,19 +465,20 @@ export class Player {
     if (!this.active) return;
 
     this.requestId ??= requestAnimationFrame(async time => {
+      this.requestAnimationFrameTime = time;
       this.requestId = null;
-      if (time - this.renderTime >= 1000 / (this.status.fps + 5)) {
-        this.renderTime = time;
-        await this.lock.acquire();
-        try {
-          await this.run();
-        } catch (e: any) {
-          this.logger.error(e);
-        }
-        this.lock.release();
-      } else {
-        this.request();
+      // if (time - this.renderTime >= 1000 / (this.status.fps + 5)) {
+      // this.renderTime = time;
+      await this.lock.acquire();
+      try {
+        await this.run(time);
+      } catch (e: any) {
+        this.logger.error(e);
       }
+      this.lock.release();
+      // } else {
+      this.request();
+      // }
     });
   }
 

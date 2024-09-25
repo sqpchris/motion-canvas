@@ -1,0 +1,257 @@
+import { arcLerp } from '../tweening';
+import { map } from '../tweening/interpolationFunctions';
+import { Direction, Origin } from './Origin';
+import { EPSILON } from './Type';
+import { CompoundSignalContext, } from '../signals';
+import { DEG2RAD, RAD2DEG } from '../utils';
+/**
+ * Represents a two-dimensional vector.
+ */
+export class Vector2 {
+    static createSignal(initial, interpolation = Vector2.lerp, owner) {
+        return new CompoundSignalContext(['x', 'y'], (value) => new Vector2(value), initial, interpolation, owner).toSignal();
+    }
+    static lerp(from, to, value) {
+        let valueX;
+        let valueY;
+        if (typeof value === 'number') {
+            valueX = valueY = value;
+        }
+        else {
+            valueX = value.x;
+            valueY = value.y;
+        }
+        return new Vector2(map(from.x, to.x, valueX), map(from.y, to.y, valueY));
+    }
+    static arcLerp(from, to, value, reverse = false, ratio) {
+        ratio ?? (ratio = from.sub(to).ctg);
+        return Vector2.lerp(from, to, arcLerp(value, reverse, ratio));
+    }
+    static createArcLerp(reverse, ratio) {
+        return (from, to, value) => Vector2.arcLerp(from, to, value, reverse, ratio);
+    }
+    static fromOrigin(origin) {
+        const position = new Vector2();
+        if (origin === Origin.Middle) {
+            return position;
+        }
+        if (origin & Direction.Left) {
+            position.x = -1;
+        }
+        else if (origin & Direction.Right) {
+            position.x = 1;
+        }
+        if (origin & Direction.Top) {
+            position.y = -1;
+        }
+        else if (origin & Direction.Bottom) {
+            position.y = 1;
+        }
+        return position;
+    }
+    static fromScalar(value) {
+        return new Vector2(value, value);
+    }
+    static fromRadians(radians) {
+        return new Vector2(Math.cos(radians), Math.sin(radians));
+    }
+    static fromDegrees(degrees) {
+        return Vector2.fromRadians(degrees * DEG2RAD);
+    }
+    /**
+     * Return the angle in radians between the vector described by x and y and the
+     * positive x-axis.
+     *
+     * @param x - The x component of the vector.
+     * @param y - The y component of the vector.
+     */
+    static radians(x, y) {
+        return Math.atan2(y, x);
+    }
+    /**
+     * Return the angle in degrees between the vector described by x and y and the
+     * positive x-axis.
+     *
+     * @param x - The x component of the vector.
+     * @param y - The y component of the vector.
+     *
+     * @remarks
+     * The returned angle will be between -180 and 180 degrees.
+     */
+    static degrees(x, y) {
+        return Vector2.radians(x, y) * RAD2DEG;
+    }
+    static magnitude(x, y) {
+        return Math.sqrt(x * x + y * y);
+    }
+    static squaredMagnitude(x, y) {
+        return x * x + y * y;
+    }
+    get width() {
+        return this.x;
+    }
+    set width(value) {
+        this.x = value;
+    }
+    get height() {
+        return this.y;
+    }
+    set height(value) {
+        this.y = value;
+    }
+    get magnitude() {
+        return Vector2.magnitude(this.x, this.y);
+    }
+    get squaredMagnitude() {
+        return Vector2.squaredMagnitude(this.x, this.y);
+    }
+    get normalized() {
+        return this.scale(1 / Vector2.magnitude(this.x, this.y));
+    }
+    get safe() {
+        return new Vector2(isNaN(this.x) ? 0 : this.x, isNaN(this.y) ? 0 : this.y);
+    }
+    get flipped() {
+        return new Vector2(-this.x, -this.y);
+    }
+    get floored() {
+        return new Vector2(Math.floor(this.x), Math.floor(this.y));
+    }
+    get perpendicular() {
+        return new Vector2(this.y, -this.x);
+    }
+    /**
+     * Return the angle in radians between the vector and the positive x-axis.
+     */
+    get radians() {
+        return Vector2.radians(this.x, this.y);
+    }
+    /**
+     * Return the angle in degrees between the vector and the positive x-axis.
+     *
+     * @remarks
+     * The returned angle will be between -180 and 180 degrees.
+     */
+    get degrees() {
+        return Vector2.degrees(this.x, this.y);
+    }
+    get ctg() {
+        return this.x / this.y;
+    }
+    constructor(one, two) {
+        this.x = 0;
+        this.y = 0;
+        if (one === undefined || one === null) {
+            return;
+        }
+        if (typeof one !== 'object') {
+            this.x = one;
+            this.y = two ?? one;
+            return;
+        }
+        if (Array.isArray(one)) {
+            this.x = one[0];
+            this.y = one[1];
+            return;
+        }
+        if ('width' in one) {
+            this.x = one.width;
+            this.y = one.height;
+            return;
+        }
+        this.x = one.x;
+        this.y = one.y;
+    }
+    lerp(to, value) {
+        return Vector2.lerp(this, to, value);
+    }
+    getOriginOffset(origin) {
+        const offset = Vector2.fromOrigin(origin);
+        offset.x *= this.x / 2;
+        offset.y *= this.y / 2;
+        return offset;
+    }
+    scale(value) {
+        return new Vector2(this.x * value, this.y * value);
+    }
+    transformAsPoint(matrix) {
+        return new Vector2(this.x * matrix.m11 + this.y * matrix.m21 + matrix.m41, this.x * matrix.m12 + this.y * matrix.m22 + matrix.m42);
+    }
+    transform(matrix) {
+        return new Vector2(this.x * matrix.m11 + this.y * matrix.m21, this.x * matrix.m12 + this.y * matrix.m22);
+    }
+    mul(possibleVector) {
+        const vector = new Vector2(possibleVector);
+        return new Vector2(this.x * vector.x, this.y * vector.y);
+    }
+    div(possibleVector) {
+        const vector = new Vector2(possibleVector);
+        return new Vector2(this.x / vector.x, this.y / vector.y);
+    }
+    add(possibleVector) {
+        const vector = new Vector2(possibleVector);
+        return new Vector2(this.x + vector.x, this.y + vector.y);
+    }
+    sub(possibleVector) {
+        const vector = new Vector2(possibleVector);
+        return new Vector2(this.x - vector.x, this.y - vector.y);
+    }
+    dot(possibleVector) {
+        const vector = new Vector2(possibleVector);
+        return this.x * vector.x + this.y * vector.y;
+    }
+    mod(possibleVector) {
+        const vector = new Vector2(possibleVector);
+        return new Vector2(this.x % vector.x, this.y % vector.y);
+    }
+    addX(value) {
+        return new Vector2(this.x + value, this.y);
+    }
+    addY(value) {
+        return new Vector2(this.x, this.y + value);
+    }
+    toSymbol() {
+        return Vector2.symbol;
+    }
+    toString() {
+        return `Vector2(${this.x}, ${this.y})`;
+    }
+    serialize() {
+        return { x: this.x, y: this.y };
+    }
+    /**
+     * Check if two vectors are exactly equal to each other.
+     *
+     * @remarks
+     * If you need to compensate for floating point inaccuracies, use the
+     * {@link equals} method, instead.
+     *
+     * @param other - The vector to compare.
+     */
+    exactlyEquals(other) {
+        return this.x === other.x && this.y === other.y;
+    }
+    /**
+     * Check if two vectors are equal to each other.
+     *
+     * @remarks
+     * This method allows passing an allowed error margin when comparing vectors
+     * to compensate for floating point inaccuracies. To check if two vectors are
+     * exactly equal, use the {@link exactlyEquals} method, instead.
+     *
+     * @param other - The vector to compare.
+     * @param threshold - The allowed error threshold when comparing the vectors.
+     */
+    equals(other, threshold = EPSILON) {
+        return (Math.abs(this.x - other.x) <= threshold + Number.EPSILON &&
+            Math.abs(this.y - other.y) <= threshold + Number.EPSILON);
+    }
+}
+Vector2.symbol = Symbol.for('@motion-canvas/core/types/Vector2');
+Vector2.zero = new Vector2();
+Vector2.one = new Vector2(1, 1);
+Vector2.right = new Vector2(1, 0);
+Vector2.left = new Vector2(-1, 0);
+Vector2.up = new Vector2(0, 1);
+Vector2.down = new Vector2(0, -1);
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiVmVjdG9yLmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vLi4vc3JjL3R5cGVzL1ZlY3Rvci50cyJdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiQUFBQSxPQUFPLEVBQUMsT0FBTyxFQUF3QixNQUFNLGFBQWEsQ0FBQztBQUMzRCxPQUFPLEVBQUMsR0FBRyxFQUFDLE1BQU0sb0NBQW9DLENBQUM7QUFDdkQsT0FBTyxFQUFDLFNBQVMsRUFBRSxNQUFNLEVBQUMsTUFBTSxVQUFVLENBQUM7QUFDM0MsT0FBTyxFQUFDLE9BQU8sRUFBTyxNQUFNLFFBQVEsQ0FBQztBQUNyQyxPQUFPLEVBRUwscUJBQXFCLEdBR3RCLE1BQU0sWUFBWSxDQUFDO0FBQ3BCLE9BQU8sRUFBQyxPQUFPLEVBQUUsT0FBTyxFQUFDLE1BQU0sVUFBVSxDQUFDO0FBdUIxQzs7R0FFRztBQUNILE1BQU0sT0FBTyxPQUFPO0lBZVgsTUFBTSxDQUFDLFlBQVksQ0FDeEIsT0FBc0MsRUFDdEMsZ0JBQWdELE9BQU8sQ0FBQyxJQUFJLEVBQzVELEtBQVc7UUFFWCxPQUFPLElBQUkscUJBQXFCLENBQzlCLENBQUMsR0FBRyxFQUFFLEdBQUcsQ0FBQyxFQUNWLENBQUMsS0FBc0IsRUFBRSxFQUFFLENBQUMsSUFBSSxPQUFPLENBQUMsS0FBSyxDQUFDLEVBQzlDLE9BQU8sRUFDUCxhQUFhLEVBQ2IsS0FBSyxDQUNOLENBQUMsUUFBUSxFQUFFLENBQUM7SUFDZixDQUFDO0lBRU0sTUFBTSxDQUFDLElBQUksQ0FBQyxJQUFhLEVBQUUsRUFBVyxFQUFFLEtBQXVCO1FBQ3BFLElBQUksTUFBTSxDQUFDO1FBQ1gsSUFBSSxNQUFNLENBQUM7UUFFWCxJQUFJLE9BQU8sS0FBSyxLQUFLLFFBQVEsRUFBRTtZQUM3QixNQUFNLEdBQUcsTUFBTSxHQUFHLEtBQUssQ0FBQztTQUN6QjthQUFNO1lBQ0wsTUFBTSxHQUFHLEtBQUssQ0FBQyxDQUFDLENBQUM7WUFDakIsTUFBTSxHQUFHLEtBQUssQ0FBQyxDQUFD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
